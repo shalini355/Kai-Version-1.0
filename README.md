@@ -1,4 +1,4 @@
-# Kai - AI Mental Wellness Assistant
+# Kai – AI Powered Mental Health Well-being Assistant
 
 [![Repository](https://img.shields.io/badge/GitHub-Kai--Version--1.0-183b46?logo=github)](https://github.com/shalini355/Kai-Version-1.0)
 [![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-246b78)](https://github.com/shalini355/Kai-Version-1.0/tree/main/client)
