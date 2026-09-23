@@ -17,6 +17,7 @@ Repository: https://github.com/shalini355/Kai-Version-1.0
 - **Mood tracker:** Daily check-ins with notes and 7-day or 30-day Recharts trends.
 - **Private journal:** Create, edit, and delete entries scoped to the logged-in user.
 - **Guided breathing:** Frontend-only animated box-breathing timer.
+- **Wellness toolkit:** 20 guided practices across breathing, grounding, journaling, relaxation, and mood support.
 - **Daily affirmations:** A rotating curated affirmation shown once per day.
 - **Secure authentication:** JWT access and refresh cookies with bcrypt password hashing.
 - **Privacy controls:** Rate limiting, Helmet, restricted CORS, validation, and centralized errors.

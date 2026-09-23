@@ -1,12 +1,37 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const { validationResult } = require('express-validator');
 const { User } = require('./models');
-const { jwtSecret, jwtRefreshSecret, nodeEnv } = require('./config');
+const { clientOrigin, emailFrom, emailHost, emailPass, emailPort, emailUser, jwtSecret, jwtRefreshSecret, nodeEnv } = require('./config');
 
 const cookieOptions = { httpOnly: true, sameSite: 'lax', secure: nodeEnv === 'production' };
 const accessCookie = { ...cookieOptions, maxAge: 15 * 60 * 1000 };
 const refreshCookie = { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 };
+const resetMessage = "If an account exists for this email, you'll receive a reset link shortly.";
+const invalidResetMessage = 'This reset link is invalid or has expired. Request a new one to continue.';
+
+const mailer = emailHost && emailUser && emailPass ? nodemailer.createTransport({ host: emailHost, port: emailPort, secure: emailPort === 465, auth: { user: emailUser, pass: emailPass } }) : null;
+
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+async function sendResetEmail(email, token) {
+  const resetUrl = `${clientOrigin}/reset-password/${token}`;
+  if (!mailer) {
+    console.info(`[password reset] SMTP is not configured. Local reset URL: ${resetUrl}`);
+    return;
+  }
+  await mailer.sendMail({
+    from: emailFrom,
+    to: email,
+    subject: 'Reset your Kai password',
+    text: `Reset your Kai password: ${resetUrl}\n\nThis link expires in 15 minutes. If you didn't request this, ignore this email.`,
+    html: `<p>Reset your Kai password</p><p><a href="${resetUrl}">Reset your password</a></p><p>This link expires in 15 minutes.</p><p>If you didn't request this, ignore this email.</p>`,
+  });
+}
 
 function issueTokens(user) {
   const accessToken = jwt.sign({ id: user._id.toString(), email: user.email }, jwtSecret, { expiresIn: '15m' });
@@ -45,6 +70,40 @@ async function login(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function forgotPassword(req, res, next) {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ message: errors.array()[0].msg });
+    const email = req.body.email.toLowerCase().trim();
+    const user = await User.findOne({ email });
+    if (user) {
+      const token = crypto.randomBytes(32).toString('hex');
+      user.resetPasswordToken = hashResetToken(token);
+      user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+      await user.save();
+      try { await sendResetEmail(user.email, token); } catch (error) { console.error('Password reset email failed:', error.message); }
+    }
+    res.json({ message: resetMessage });
+  } catch (err) { next(err); }
+}
+
+async function resetPassword(req, res, next) {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ message: errors.array()[0].msg });
+    const user = await User.findOne({ resetPasswordToken: hashResetToken(req.params.token), resetPasswordExpires: { $gt: new Date() } });
+    if (!user) return res.status(400).json({ message: invalidResetMessage });
+    user.passwordHash = await bcrypt.hash(req.body.newPassword, 12);
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    user.refreshTokenHash = null;
+    await user.save();
+    res.clearCookie('accessToken', cookieOptions);
+    res.clearCookie('refreshToken', cookieOptions);
+    res.json({ message: 'Your password has been reset. Please sign in again.' });
+  } catch (err) { next(err); }
+}
+
 async function refresh(req, res) {
   const token = req.cookies.refreshToken;
   if (!token) return res.status(401).json({ message: 'Please sign in again.' });
@@ -63,4 +122,4 @@ function logout(req, res) {
   res.json({ message: 'Signed out.' });
 }
 
-module.exports = { register, login, refresh, logout };
+module.exports = { register, login, forgotPassword, resetPassword, refresh, logout };
